@@ -1,0 +1,24 @@
+/* ═══════════════════════════════════════════════════════════════
+   Custom Swagger UI Theme  — indigo / slate palette
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Topbar ──────────────────────────────────────────────────── */
+.swagger-ui .topbar {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+  border-bottom: 3px solid #4f46e5;
+  padding: 10px 0;
+}
+
+/* Hide default Petstore logo */
+.swagger-ui .topbar-wrapper img { display: none !important; }
+
+/* Custom logo via CSS background-image */
+.swagger-ui .topbar-wrapper a::before {
+  content: "";
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  background: url("/swagger-ui/logo.svg") no-repeat center / contain;
+  margin-right: 10px;
+  vertical-align: middle;
+}
