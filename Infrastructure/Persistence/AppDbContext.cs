@@ -10,7 +10,13 @@ public class AppDbContext(
     DbContextOptions<AppDbContext> options,
     ICurrentUserService currentUserService) : DbContext(options)
 {
+    // ── Identity ──────────────────────────────────────────────────────────
     public DbSet<User> Users => Set<User>();
+
+    // ── Authorization ─────────────────────────────────────────────────────
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

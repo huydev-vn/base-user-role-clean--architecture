@@ -13,6 +13,7 @@ internal sealed class RefreshTokenCommandHandler(
     IUserRepository userRepository,
     IUnitOfWork unitOfWork,
     IJwtTokenService jwtTokenService,
+    IPermissionService permissionService,
     IMapper mapper)
     : ICommandHandler<RefreshTokenCommand, AuthResponse>
 {
@@ -28,8 +29,12 @@ internal sealed class RefreshTokenCommandHandler(
         if (!user.IsActive)
             return Result<AuthResponse>.Failure("Tài khoản không còn hoạt động.");
 
+        // Lấy effective permissions để nhúng vào access token mới
+        var permissions = await permissionService.GetEffectivePermissionNamesAsync(
+            user.Id, user.Role, cancellationToken);
+
         // Rotate refresh token — tránh refresh token reuse attack
-        var newAccessToken = jwtTokenService.GenerateAccessToken(user);
+        var newAccessToken  = jwtTokenService.GenerateAccessToken(user, permissions);
         var newRefreshToken = jwtTokenService.GenerateRefreshToken();
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
 

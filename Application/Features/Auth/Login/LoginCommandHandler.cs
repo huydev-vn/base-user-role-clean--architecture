@@ -15,6 +15,7 @@ internal sealed class LoginCommandHandler(
     IUnitOfWork unitOfWork,
     IPasswordHasher passwordHasher,
     IJwtTokenService jwtTokenService,
+    IPermissionService permissionService,
     IMapper mapper)
     : ICommandHandler<LoginCommand, AuthResponse>
 {
@@ -47,10 +48,13 @@ internal sealed class LoginCommandHandler(
             return Result<AuthResponse>.Failure("Username hoặc mật khẩu không đúng.");
         }
 
-        // Đăng nhập thành công — reset counter + cấp token mới
+        // Đăng nhập thành công — reset counter + lấy permissions + cấp token mới
         user.RecordSuccessfulLogin();
 
-        var accessToken = jwtTokenService.GenerateAccessToken(user);
+        var permissions = await permissionService.GetEffectivePermissionNamesAsync(
+            user.Id, user.Role, cancellationToken);
+
+        var accessToken  = jwtTokenService.GenerateAccessToken(user, permissions);
         var refreshToken = jwtTokenService.GenerateRefreshToken();
         user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
 

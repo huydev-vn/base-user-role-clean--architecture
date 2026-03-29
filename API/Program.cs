@@ -24,17 +24,20 @@ try
     // ── Services ─────────────────────────────────────────────────────────
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-    builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 
     builder.Services.AddControllers();
     builder.Services.AddJwtAuthentication(builder.Configuration);
+    builder.Services.AddPermissionAuthorization();
     builder.Services.AddCorsPolicy();
     builder.Services.AddSwaggerWithJwt();
 
     // ── Pipeline ─────────────────────────────────────────────────────────
     var app = builder.Build();
+
+    // Seed permissions vào DB khi startup (idempotent — bỏ qua nếu đã tồn tại)
+    await app.Services.InitializeAsync();
 
     app.UseMiddleware<GlobalExceptionMiddleware>();
     app.UseStaticFiles();

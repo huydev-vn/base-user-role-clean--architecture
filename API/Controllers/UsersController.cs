@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.DTOs.Permissions;
 using Application.DTOs.Users;
 using Application.Features.Users.ChangePassword;
 using Application.Features.Users.ChangeRole;
@@ -6,7 +7,12 @@ using Application.Features.Users.Delete;
 using Application.Features.Users.GetAll;
 using Application.Features.Users.GetById;
 using Application.Features.Users.GetCurrentUser;
+using Application.Features.Users.GrantPermission;
+using Application.Features.Users.DenyPermission;
+using Application.Features.Users.GetPermissions;
+using Application.Features.Users.UpdatePermission;
 using Application.Features.Users.UpdateProfile;
+using Domain.Constants;
 using Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -90,6 +96,7 @@ public sealed class UsersController(ISender sender) : BaseController
     /// <summary>
     /// Lấy danh sách users có phân trang, tìm kiếm và lọc theo role/status.
     /// </summary>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối.</param>
     /// <param name="page">Trang hiện tại (mặc định 1).</param>
     /// <param name="pageSize">Số item mỗi trang, tối đa 100 (mặc định 20).</param>
     /// <param name="search">Tìm theo username, email, họ tên.</param>
@@ -202,4 +209,95 @@ public sealed class UsersController(ISender sender) : BaseController
 
     private Guid GetCurrentUserId()
         => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    // ── User Permission Overrides ─────────────────────────────────────────
+
+    /// <summary>
+    /// Lấy danh sách permission overrides của một user cụ thể.
+    /// </summary>
+    /// <response code="200">Danh sách UserPermission overrides.</response>
+    /// <response code="404">User không tồn tại.</response>
+    [HttpGet("{id:guid}/permissions")]
+    [Authorize(Policy = Permissions.Users.ManagePermissions)]
+    [ProducesResponseType(typeof(IReadOnlyList<UserPermissionDto>), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetUserPermissions(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetUserPermissionsQuery(id), cancellationToken);
+        return OkOrError(result);
+    }
+
+    /// <summary>
+    /// Grant (cho phép) một permission cho user — tạo override IsGranted = true.
+    /// </summary>
+    /// <response code="204">Grant thành công.</response>
+    /// <response code="400">Permission không tồn tại hoặc override đã tồn tại.</response>
+    /// <response code="404">User hoặc Permission không tìm thấy.</response>
+    [HttpPost("{id:guid}/permissions/grant")]
+    [Authorize(Policy = Permissions.Users.ManagePermissions)]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GrantPermission(
+        Guid id,
+        [FromBody] UserPermissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new GrantUserPermissionCommand(id, request.PermissionId),
+            cancellationToken);
+
+        return ToActionResult(result);
+    }
+
+    /// <summary>
+    /// Deny (từ chối) một permission cho user — tạo override IsGranted = false.
+    /// </summary>
+    /// <response code="204">Deny thành công.</response>
+    /// <response code="400">Permission không tồn tại hoặc override đã tồn tại.</response>
+    /// <response code="404">User hoặc Permission không tìm thấy.</response>
+    [HttpPost("{id:guid}/permissions/deny")]
+    [Authorize(Policy = Permissions.Users.ManagePermissions)]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> DenyPermission(
+        Guid id,
+        [FromBody] UserPermissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new DenyUserPermissionCommand(id, request.PermissionId),
+            cancellationToken);
+
+        return ToActionResult(result);
+    }
+
+    /// <summary>
+    /// Cập nhật IsGranted của một UserPermission override đã tồn tại.
+    /// </summary>
+    /// <param name="id">User ID.</param>
+    /// <param name="permissionId">Permission ID.</param>
+    /// <param name="request">Giá trị IsGranted mới.</param>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối.</param>
+    /// <response code="204">Cập nhật thành công.</response>
+    /// <response code="404">UserPermission override không tồn tại.</response>
+    [HttpPut("{id:guid}/permissions/{permissionId:guid}")]
+    [Authorize(Policy = Permissions.Users.ManagePermissions)]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> UpdatePermission(
+        Guid id,
+        Guid permissionId,
+        [FromBody] UpdateUserPermissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new UpdateUserPermissionCommand(id, permissionId, request.IsGranted),
+            cancellationToken);
+
+        return ToActionResult(result);
+    }
 }

@@ -76,16 +76,16 @@ public static class Permissions
         public const string ToggleActive = "Permissions.ToggleActive";
     }
 
-    // ── Thêm group mới ở đây khi mở rộng ─────────────────────────────────
-    // public static class Reports
-    // {
-    //     public const string View   = "Reports.View";
-    //     public const string Export = "Reports.Export";
-    // }
-    //
-    // public static class Settings
-    // {
-    //     public const string Read   = "Settings.Read";
-    //     public const string Update = "Settings.Update";
-    // }
+     //── Thêm group mới ở đây khi mở rộng ─────────────────────────────────
+     public static class Reports
+    {
+        public const string View = "Reports.View";
+        public const string Export = "Reports.Export";
+    }
+
+    public static class Settings
+    {
+        public const string Read = "Settings.Read";
+        public const string Update = "Settings.Update";
+    }
 }

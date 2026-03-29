@@ -7,11 +7,11 @@ using Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
-namespace API.Services;
+namespace Infrastructure.Services;
 
 /// <summary>
 /// Tạo và quản lý JWT access token + refresh token.
-/// Đặt ở API layer vì dùng JwtBearer library đã có sẵn ở đây.
+/// Đặt ở Infrastructure vì phụ thuộc vào thư viện JWT bên ngoài.
 /// </summary>
 public sealed class JwtTokenService(IConfiguration configuration) : IJwtTokenService
 {
@@ -22,22 +22,26 @@ public sealed class JwtTokenService(IConfiguration configuration) : IJwtTokenSer
     private readonly int _expiryMinutes =
         int.TryParse(configuration["JwtSettings:ExpiryMinutes"], out var m) ? m : 60;
 
-    public string GenerateAccessToken(User user)
+    public string GenerateAccessToken(User user, IReadOnlyList<string>? permissions = null)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
+        var key         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         // Đặt cả 2 claim types để tương thích với cả raw JWT và ASP.NET Core identity
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim(JwtRegisteredClaimNames.UniqueName, user.Username),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), // User.FindFirstValue(ClaimTypes.NameIdentifier)
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.Role.ToString())           // [Authorize(Roles = "Admin")]
+            new(JwtRegisteredClaimNames.Sub,        user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti,        Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.UniqueName, user.Username),
+            new(JwtRegisteredClaimNames.Email,      user.Email),
+            new(ClaimTypes.NameIdentifier,          user.Id.ToString()),
+            new(ClaimTypes.Name,                    user.Username),
+            new(ClaimTypes.Role,                    user.Role.ToString())
         };
+
+        if (permissions is { Count: > 0 })
+            foreach (var permission in permissions)
+                claims.Add(new Claim("permissions", permission));
 
         var token = new JwtSecurityToken(
             issuer: _issuer,
