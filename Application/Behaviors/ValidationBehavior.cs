@@ -31,7 +31,7 @@ public sealed class ValidationBehavior<TRequest, TResponse>(
             .ToList();
 
         if (failures.Count > 0)
-            throw new Application.Exceptions.ValidationException(failures);
+            throw new Exceptions.ValidationException(failures);
 
         return await next(cancellationToken);
     }

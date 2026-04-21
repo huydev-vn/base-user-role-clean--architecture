@@ -10,13 +10,19 @@ public class AppDbContext(
     DbContextOptions<AppDbContext> options,
     ICurrentUserService currentUserService) : DbContext(options)
 {
+    #region Identity
     // ── Identity ──────────────────────────────────────────────────────────
     public DbSet<User> Users => Set<User>();
 
+    #endregion
+
+    #region Authorization 
     // ── Authorization ─────────────────────────────────────────────────────
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+
+    #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
