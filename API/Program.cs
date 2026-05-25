@@ -6,7 +6,6 @@ using Application.Interfaces;
 using Infrastructure;
 using Serilog;
 
-// ── Serilog: đọc config từ appsettings.json ──────────────────────────────
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(new ConfigurationBuilder()
         .AddJsonFile("appsettings.json")
@@ -30,13 +29,14 @@ try
     builder.Services.AddControllers();
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddPermissionAuthorization();
-    builder.Services.AddCorsPolicy();
+    builder.Services.AddCorsPolicy(builder.Configuration);
     builder.Services.AddSwaggerWithJwt();
+    builder.Services.AddApiRateLimiting();
+    builder.Services.AddApiHealthChecks();
 
     // ── Pipeline ─────────────────────────────────────────────────────────
     var app = builder.Build();
 
-    // Seed permissions vào DB khi startup (idempotent — bỏ qua nếu đã tồn tại)
     await app.Services.InitializeAsync();
 
     app.UseMiddleware<GlobalExceptionMiddleware>();
@@ -47,13 +47,14 @@ try
 
     app.UseHttpsRedirection();
     app.UseCors("AllowFrontend");
+    app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
+    app.MapApiHealthChecks();
 
     app.Run();
 }
 catch (HostAbortedException) { }
 catch (Exception ex) { Log.Fatal(ex, "Application terminated unexpectedly."); }
 finally { Log.CloseAndFlush(); }
-

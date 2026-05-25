@@ -20,19 +20,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers;
 
-/// <summary>
-/// User management endpoints.
-/// - /me/*  : bất kỳ user đã đăng nhập (tự thao tác trên account của mình).
-/// - /{id}/* : Admin/Moderator thao tác trên user bất kỳ.
-/// </summary>
 [Authorize]
 public sealed class UsersController(ISender sender) : BaseController
 {
     // ── "Me" Endpoints ────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Lấy thông tin profile của user đang đăng nhập.
-    /// </summary>
+    /// <summary>Lấy thông tin profile của user đang đăng nhập.</summary>
     /// <response code="200">Profile data.</response>
     [HttpGet("me")]
     [ProducesResponseType(typeof(UserDto), 200)]
@@ -42,22 +35,19 @@ public sealed class UsersController(ISender sender) : BaseController
         return OkOrError(result);
     }
 
-    /// <summary>
-    /// Cập nhật profile (họ tên, số điện thoại, avatar).
-    /// </summary>
+    /// <summary>Cập nhật profile (họ tên, số điện thoại, avatar).</summary>
     /// <response code="204">Cập nhật thành công.</response>
     /// <response code="400">Validation thất bại.</response>
     [HttpPut("me/profile")]
     [ProducesResponseType(204)]
-    [ProducesResponseType(400)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
     public async Task<IActionResult> UpdateMyProfile(
         [FromBody] UpdateProfileRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = GetCurrentUserId();
         var result = await sender.Send(
             new UpdateUserProfileCommand(
-                userId,
+                GetCurrentUserId(),
                 request.FirstName,
                 request.LastName,
                 request.PhoneNumber,
@@ -67,22 +57,19 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    /// <summary>
-    /// Đổi mật khẩu — cần cung cấp mật khẩu cũ để xác nhận.
-    /// </summary>
+    /// <summary>Đổi mật khẩu — cần cung cấp mật khẩu cũ.</summary>
     /// <response code="204">Đổi mật khẩu thành công.</response>
     /// <response code="400">Mật khẩu cũ sai hoặc validation thất bại.</response>
     [HttpPut("me/password")]
     [ProducesResponseType(204)]
-    [ProducesResponseType(400)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
     public async Task<IActionResult> ChangeMyPassword(
         [FromBody] ChangePasswordRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = GetCurrentUserId();
         var result = await sender.Send(
             new ChangePasswordCommand(
-                userId,
+                GetCurrentUserId(),
                 request.CurrentPassword,
                 request.NewPassword,
                 request.ConfirmNewPassword),
@@ -96,15 +83,9 @@ public sealed class UsersController(ISender sender) : BaseController
     /// <summary>
     /// Lấy danh sách users có phân trang, tìm kiếm và lọc theo role/status.
     /// </summary>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối.</param>
-    /// <param name="page">Trang hiện tại (mặc định 1).</param>
-    /// <param name="pageSize">Số item mỗi trang, tối đa 100 (mặc định 20).</param>
-    /// <param name="search">Tìm theo username, email, họ tên.</param>
-    /// <param name="role">Lọc theo role.</param>
-    /// <param name="status">Lọc theo trạng thái.</param>
     /// <response code="200">Danh sách users kèm pagination metadata.</response>
     [HttpGet]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Policy = Permissions.Users.Read)]
     [ProducesResponseType(typeof(Application.Common.PagedResult<UserDto>), 200)]
     public async Task<IActionResult> GetAll(
         CancellationToken cancellationToken,
@@ -114,7 +95,6 @@ public sealed class UsersController(ISender sender) : BaseController
         [FromQuery] UserRole? role = null,
         [FromQuery] UserStatus? status = null)
     {
-        // Giới hạn pageSize để tránh query quá lớn
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var result = await sender.Send(
@@ -124,15 +104,13 @@ public sealed class UsersController(ISender sender) : BaseController
         return OkOrError(result);
     }
 
-    /// <summary>
-    /// Lấy thông tin user theo ID.
-    /// </summary>
+    /// <summary>Lấy thông tin user theo ID.</summary>
     /// <response code="200">User data.</response>
     /// <response code="404">User không tồn tại.</response>
     [HttpGet("{id:guid}", Name = "GetUserById")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Policy = Permissions.Users.Read)]
     [ProducesResponseType(typeof(UserDto), 200)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -141,15 +119,13 @@ public sealed class UsersController(ISender sender) : BaseController
         return OkOrError(result);
     }
 
-    /// <summary>
-    /// Cập nhật profile của user bất kỳ (Admin/Moderator).
-    /// </summary>
+    /// <summary>Cập nhật profile của user bất kỳ.</summary>
     /// <response code="204">Cập nhật thành công.</response>
     /// <response code="404">User không tồn tại.</response>
     [HttpPut("{id:guid}/profile")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Policy = Permissions.Users.Update)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> UpdateProfile(
         Guid id,
         [FromBody] UpdateProfileRequest request,
@@ -167,15 +143,13 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    /// <summary>
-    /// Đổi role của user (Admin only).
-    /// </summary>
+    /// <summary>Đổi role của user (Admin only).</summary>
     /// <response code="204">Đổi role thành công.</response>
     /// <response code="404">User không tồn tại.</response>
     [HttpPut("{id:guid}/role")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = Permissions.Users.ChangeRole)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> ChangeRole(
         Guid id,
         [FromBody] ChangeRoleRequest request,
@@ -188,15 +162,13 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    /// <summary>
-    /// Xóa user (soft-delete — Admin only).
-    /// </summary>
+    /// <summary>Xóa user (soft-delete).</summary>
     /// <response code="204">Xóa thành công.</response>
     /// <response code="404">User không tồn tại.</response>
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = Permissions.Users.Delete)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -205,22 +177,15 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private Guid GetCurrentUserId()
-        => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     // ── User Permission Overrides ─────────────────────────────────────────
 
-    /// <summary>
-    /// Lấy danh sách permission overrides của một user cụ thể.
-    /// </summary>
+    /// <summary>Lấy danh sách permission overrides của một user.</summary>
     /// <response code="200">Danh sách UserPermission overrides.</response>
     /// <response code="404">User không tồn tại.</response>
     [HttpGet("{id:guid}/permissions")]
     [Authorize(Policy = Permissions.Users.ManagePermissions)]
     [ProducesResponseType(typeof(IReadOnlyList<UserPermissionDto>), 200)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> GetUserPermissions(
         Guid id,
         CancellationToken cancellationToken)
@@ -229,17 +194,15 @@ public sealed class UsersController(ISender sender) : BaseController
         return OkOrError(result);
     }
 
-    /// <summary>
-    /// Grant (cho phép) một permission cho user — tạo override IsGranted = true.
-    /// </summary>
+    /// <summary>Grant một permission cho user (override IsGranted = true).</summary>
     /// <response code="204">Grant thành công.</response>
-    /// <response code="400">Permission không tồn tại hoặc override đã tồn tại.</response>
+    /// <response code="400">Override đã tồn tại.</response>
     /// <response code="404">User hoặc Permission không tìm thấy.</response>
     [HttpPost("{id:guid}/permissions/grant")]
     [Authorize(Policy = Permissions.Users.ManagePermissions)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> GrantPermission(
         Guid id,
         [FromBody] UserPermissionRequest request,
@@ -252,17 +215,15 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    /// <summary>
-    /// Deny (từ chối) một permission cho user — tạo override IsGranted = false.
-    /// </summary>
+    /// <summary>Deny một permission cho user (override IsGranted = false).</summary>
     /// <response code="204">Deny thành công.</response>
-    /// <response code="400">Permission không tồn tại hoặc override đã tồn tại.</response>
+    /// <response code="400">Override đã tồn tại.</response>
     /// <response code="404">User hoặc Permission không tìm thấy.</response>
     [HttpPost("{id:guid}/permissions/deny")]
     [Authorize(Policy = Permissions.Users.ManagePermissions)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> DenyPermission(
         Guid id,
         [FromBody] UserPermissionRequest request,
@@ -275,19 +236,13 @@ public sealed class UsersController(ISender sender) : BaseController
         return ToActionResult(result);
     }
 
-    /// <summary>
-    /// Cập nhật IsGranted của một UserPermission override đã tồn tại.
-    /// </summary>
-    /// <param name="id">User ID.</param>
-    /// <param name="permissionId">Permission ID.</param>
-    /// <param name="request">Giá trị IsGranted mới.</param>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối.</param>
+    /// <summary>Cập nhật IsGranted của một UserPermission override đã tồn tại.</summary>
     /// <response code="204">Cập nhật thành công.</response>
     /// <response code="404">UserPermission override không tồn tại.</response>
     [HttpPut("{id:guid}/permissions/{permissionId:guid}")]
     [Authorize(Policy = Permissions.Users.ManagePermissions)]
     [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
     public async Task<IActionResult> UpdatePermission(
         Guid id,
         Guid permissionId,
@@ -300,4 +255,9 @@ public sealed class UsersController(ISender sender) : BaseController
 
         return ToActionResult(result);
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private Guid GetCurrentUserId()
+        => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }

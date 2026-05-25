@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"d:\\\\MY-PROJECT\\\\base-user-role-clean--architecture\" -Filter \"*.md\")",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"d:\\\\MY-PROJECT\\\\base-user-role-clean--architecture\" -MaxDepth 1 -Name \"*.md\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"d:\\\\MY-PROJECT\\\\base-user-role-clean--architecture\\\\API\\\\Controllers\\\\WeatherForecastController.cs\" -Force)"
+    ]
+  }
+}

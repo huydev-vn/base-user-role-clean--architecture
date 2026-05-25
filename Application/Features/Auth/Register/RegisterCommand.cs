@@ -10,4 +10,4 @@ public sealed record RegisterCommand(
     string Email,
     string Password,
     string ConfirmPassword
-) : ICommand<AuthResponse>;
+) : ICommand<RegisterResponse>;

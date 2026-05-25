@@ -21,29 +21,32 @@ internal sealed class RefreshTokenCommandHandler(
         RefreshTokenCommand command,
         CancellationToken cancellationToken)
     {
-        var user = await userRepository.GetByRefreshTokenAsync(command.RefreshToken, cancellationToken);
+        // Hash token nhận từ client trước khi tìm trong DB
+        var hashedIncoming = jwtTokenService.HashRefreshToken(command.RefreshToken);
+
+        var user = await userRepository.GetByRefreshTokenAsync(hashedIncoming, cancellationToken);
 
         if (user is null || user.RefreshTokenExpiresAt < DateTime.UtcNow)
-            return Result<AuthResponse>.Failure("Refresh token không hợp lệ hoặc đã hết hạn.");
+            return Result<AuthResponse>.Unauthorized("Refresh token không hợp lệ hoặc đã hết hạn.");
 
         if (!user.IsActive)
-            return Result<AuthResponse>.Failure("Tài khoản không còn hoạt động.");
+            return Result<AuthResponse>.Forbidden("Tài khoản không còn hoạt động.");
 
-        // Lấy effective permissions để nhúng vào access token mới
         var permissions = await permissionService.GetEffectivePermissionNamesAsync(
             user.Id, user.Role, cancellationToken);
 
         // Rotate refresh token — tránh refresh token reuse attack
-        var newAccessToken  = jwtTokenService.GenerateAccessToken(user, permissions);
-        var newRefreshToken = jwtTokenService.GenerateRefreshToken();
-        user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
+        var newAccessToken    = jwtTokenService.GenerateAccessToken(user, permissions);
+        var rawNewRefresh     = jwtTokenService.GenerateRefreshToken();
+        var hashedNewRefresh  = jwtTokenService.HashRefreshToken(rawNewRefresh);
 
+        user.SetRefreshToken(hashedNewRefresh, DateTime.UtcNow.AddDays(7));
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(new AuthResponse(
-            AccessToken: newAccessToken,
-            RefreshToken: newRefreshToken,
+            AccessToken:          newAccessToken,
+            RefreshToken:         rawNewRefresh,      // raw token trả về client
             AccessTokenExpiresAt: jwtTokenService.GetAccessTokenExpiry(),
-            User: mapper.Map<UserDto>(user)));
+            User:                 mapper.Map<UserDto>(user)));
     }
 }

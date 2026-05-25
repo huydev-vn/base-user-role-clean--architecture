@@ -1,16 +1,23 @@
-using System.Net;
 using System.Text.Json;
 using Application.Exceptions;
+using Microsoft.AspNetCore.Mvc;
 using ValidationException = Application.Exceptions.ValidationException;
 
 namespace API.Middleware;
 
 /// <summary>
-/// Bắt toàn bộ exception chưa được xử lý, map sang HTTP status code phù hợp.
+/// Bắt toàn bộ exception chưa được xử lý, trả về RFC 7807 ProblemDetails.
 /// Không cần try/catch trong bất kỳ Controller nào.
 /// </summary>
-public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+public sealed class GlobalExceptionMiddleware(
+    RequestDelegate next,
+    ILogger<GlobalExceptionMiddleware> logger)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public async Task InvokeAsync(HttpContext context)
     {
         try
@@ -19,39 +26,57 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
+            logger.LogError(ex, "Unhandled exception on {Method} {Path}: {Message}",
+                context.Request.Method, context.Request.Path, ex.Message);
+
             await HandleExceptionAsync(context, ex);
         }
     }
 
     private static Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        var (statusCode, errors) = exception switch
+        var (statusCode, title, extensions) = exception switch
         {
-            ValidationException vex => (HttpStatusCode.BadRequest, vex.Errors),
-            NotFoundException => (HttpStatusCode.NotFound, SingleError(exception.Message)),
-            ForbiddenException => (HttpStatusCode.Forbidden, SingleError(exception.Message)),
-            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, SingleError("Unauthorized.")),
-            _ => (HttpStatusCode.InternalServerError, SingleError("An unexpected error occurred."))
+            ValidationException vex => (
+                StatusCodes.Status400BadRequest,
+                "Dữ liệu không hợp lệ.",
+                (object?)new { errors = vex.Errors }),
+
+            NotFoundException nex => (
+                StatusCodes.Status404NotFound,
+                "Không tìm thấy tài nguyên.",
+                (object?)new { detail = nex.Message }),
+
+            ForbiddenException fex => (
+                StatusCodes.Status403Forbidden,
+                "Không có quyền truy cập.",
+                (object?)new { detail = fex.Message }),
+
+            UnauthorizedAccessException => (
+                StatusCodes.Status401Unauthorized,
+                "Chưa xác thực.",
+                (object?)null),
+
+            _ => (
+                StatusCodes.Status500InternalServerError,
+                "Đã xảy ra lỗi không mong muốn.",
+                (object?)null)
         };
 
-        context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)statusCode;
-
-        var response = new
+        var problem = new ProblemDetails
         {
-            status = (int)statusCode,
-            errors
+            Status   = statusCode,
+            Title    = title,
+            Instance = context.Request.Path
         };
 
-        return context.Response.WriteAsync(
-            JsonSerializer.Serialize(response, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            })
-        );
+        if (extensions is not null)
+            foreach (var prop in extensions.GetType().GetProperties())
+                problem.Extensions[prop.Name] = prop.GetValue(extensions);
+
+        context.Response.ContentType = "application/problem+json";
+        context.Response.StatusCode  = statusCode;
+
+        return context.Response.WriteAsync(JsonSerializer.Serialize(problem, JsonOptions));
     }
-
-    private static IDictionary<string, string[]> SingleError(string message)
-        => new Dictionary<string, string[]> { ["general"] = [message] };
 }

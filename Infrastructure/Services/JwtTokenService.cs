@@ -9,25 +9,20 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Infrastructure.Services;
 
-/// <summary>
-/// Tạo và quản lý JWT access token + refresh token.
-/// Đặt ở Infrastructure vì phụ thuộc vào thư viện JWT bên ngoài.
-/// </summary>
 public sealed class JwtTokenService(IConfiguration configuration) : IJwtTokenService
 {
     private readonly string _secret = configuration["JwtSettings:Secret"]
         ?? throw new InvalidOperationException("JwtSettings:Secret is not configured.");
-    private readonly string _issuer = configuration["JwtSettings:Issuer"]!;
+    private readonly string _issuer   = configuration["JwtSettings:Issuer"]!;
     private readonly string _audience = configuration["JwtSettings:Audience"]!;
     private readonly int _expiryMinutes =
-        int.TryParse(configuration["JwtSettings:ExpiryMinutes"], out var m) ? m : 60;
+        int.TryParse(configuration["JwtSettings:ExpiryMinutes"], out var m) ? m : 15;
 
     public string GenerateAccessToken(User user, IReadOnlyList<string>? permissions = null)
     {
         var key         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        // Đặt cả 2 claim types để tương thích với cả raw JWT và ASP.NET Core identity
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub,        user.Id.ToString()),
@@ -44,11 +39,11 @@ public sealed class JwtTokenService(IConfiguration configuration) : IJwtTokenSer
                 claims.Add(new Claim("permissions", permission));
 
         var token = new JwtSecurityToken(
-            issuer: _issuer,
-            audience: _audience,
-            claims: claims,
-            notBefore: DateTime.UtcNow,
-            expires: GetAccessTokenExpiry(),
+            issuer:            _issuer,
+            audience:          _audience,
+            claims:            claims,
+            notBefore:         DateTime.UtcNow,
+            expires:           GetAccessTokenExpiry(),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -56,9 +51,18 @@ public sealed class JwtTokenService(IConfiguration configuration) : IJwtTokenSer
 
     public string GenerateRefreshToken()
     {
-        // Cryptographically secure random — không đoán được
         var bytes = RandomNumberGenerator.GetBytes(64);
         return Convert.ToBase64String(bytes);
+    }
+
+    /// <summary>
+    /// SHA-256 hash của raw refresh token — chỉ hash này được lưu vào DB.
+    /// Nếu DB bị breach, attacker không thể dùng hash để giả mạo token.
+    /// </summary>
+    public string HashRefreshToken(string rawToken)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     public DateTime GetAccessTokenExpiry()
